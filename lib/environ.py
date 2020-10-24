@@ -3,21 +3,24 @@ import gym.spaces
 from gym.utils import seeding
 import enum
 import numpy as np
+import collections
 
 from . import data
 
 DEFAULT_BARS_COUNT = 10
-DEFAULT_COMMISSION_PERC = 0.1
+DEFAULT_COMMISSION_PERC = 0.05
+
+MINIMAL_BET = 4.0
 
 
 class Actions(enum.Enum):
     Skip = 0
-    Buy = 1
-    Close = 2
-
+    Lay = 1
+    Back = 2
+    Close = 3
 
 class State:
-    def __init__(self, bars_count, commission_perc, reset_on_close, reward_on_close=True, volumes=True):
+    def __init__(self, bars_count, commission_perc, reset_on_close=False, reward_on_close=True):
         assert isinstance(bars_count, int)
         assert bars_count > 0
         assert isinstance(commission_perc, float)
@@ -28,23 +31,22 @@ class State:
         self.commission_perc = commission_perc
         self.reset_on_close = reset_on_close
         self.reward_on_close = reward_on_close
-        self.volumes = volumes
+
 
     def reset(self, prices, offset):
         assert isinstance(prices, data.Prices)
         assert offset >= self.bars_count-1
         self.have_position = False
+        self.lay_value = 0.0
+        self.back_value = 0.0
         self.open_price = 0.0
         self._prices = prices
         self._offset = offset
 
     @property
     def shape(self):
-        # [h, l, c] * bars + position_flag + rel_profit (since open)
-        if self.volumes:
-            return (4 * self.bars_count + 1 + 1, )
-        else:
-            return (3*self.bars_count + 1 + 1, )
+        # [h, l, c] * bars + lay_value + back_value + have_position + rel_profit
+        return (8*self.bars_count + 1 + 1 + 1 + 1, )
 
     def encode(self):
         """
@@ -53,30 +55,39 @@ class State:
         res = np.ndarray(shape=self.shape, dtype=np.float32)
         shift = 0
         for bar_idx in range(-self.bars_count+1, 1):
-            res[shift] = self._prices.high[self._offset + bar_idx]
+            res[shift] = self._prices.seconds_to_start[self._offset + bar_idx]
             shift += 1
-            res[shift] = self._prices.low[self._offset + bar_idx]
+            res[shift] = self._prices.bet_type[self._offset + bar_idx]
             shift += 1
-            res[shift] = self._prices.close[self._offset + bar_idx]
+            res[shift] = self._prices.price[self._offset + bar_idx]
             shift += 1
-            if self.volumes:
-                res[shift] = self._prices.volume[self._offset + bar_idx]
-                shift += 1
+            res[shift] = self._prices.price_size[self._offset + bar_idx]
+            shift += 1
+            res[shift] = self._prices.stack_sum_back[self._offset + bar_idx]
+            shift += 1
+            res[shift] = self._prices.stack_sum_lay[self._offset + bar_idx]
+            shift += 1
+            res[shift] = self._prices.back_price[self._offset + bar_idx]
+            shift += 1
+            res[shift] = self._prices.lay_price[self._offset + bar_idx]
+            shift += 1
+        res[shift] = self.lay_value
+        shift += 1
+        res[shift] = self.back_value
+        shift += 1
         res[shift] = float(self.have_position)
         shift += 1
         if not self.have_position:
             res[shift] = 0.0
         else:
-            res[shift] = (self._cur_close() - self.open_price) / self.open_price
+            if(self.back_value != 0.0):
+                close = self._cur_close(Actions.Back)
+                res[shift] = self.open_price / close - 1
+            else:
+                close = self._cur_close(Actions.Lay)
+                res[shift] = 1 - close / self.open_price
         return res
 
-    def _cur_close(self):
-        """
-        Calculate real close price for the current bar
-        """
-        open = self._prices.open[self._offset]
-        rel_close = self._prices.close[self._offset]
-        return open * (1.0 + rel_close)
 
     def step(self, action):
         """
@@ -85,31 +96,80 @@ class State:
         :param action:
         :return: reward, done
         """
-        assert isinstance(action, Actions)
         reward = 0.0
         done = False
-        close = self._cur_close()
-        if action == Actions.Buy and not self.have_position:
+
+        if action == Actions.Back and not self.have_position:
+            self.bet_type = Actions.Back
+            close = self._cur_close(self.bet_type)
             self.have_position = True
             self.open_price = close
+            self.back_value = self.back_value + self._prices.back_price[self._offset] * MINIMAL_BET
             reward -= self.commission_perc
+        if action == Actions.Lay and not self.have_position:
+            self.bet_type = Actions.Lay
+            close = self._cur_close(Actions.Lay)
+            self.have_position = True
+            self.open_price = close
+            self.lay_value = self.lay_value + self._prices.lay_price[self._offset] * MINIMAL_BET
+            reward -= self.commission_perc
+
         elif action == Actions.Close and self.have_position:
-            reward -= self.commission_perc
-            done |= self.reset_on_close
-            if self.reward_on_close:
-                reward += 100.0 * (close - self.open_price) / self.open_price
+            close_type = Actions.Lay if self.back_value + self.lay_value > 0 else Actions.Back
+            #print("back_value", self.back_value)
+            #print("lay_value", self.lay_value)
+            close_price = self._prices.lay_price[self._offset] if close_type == Actions.Lay else self._prices.back_price[self._offset]
+            close_size = (self.back_value + self.lay_value) / close_price
+            if close_type == Actions.Lay:
+              self.lay_value = self.lay_value - self._prices.lay_price[self._offset] * close_size
+              #верно ли считается reward
+              reward += 1 - close_price / self.open_price
+            else:
+              self.back_value = self.back_value + self._prices.back_price[self._offset] * close_size
+              reward += self.open_price / close_price - 1
+            #reward всегда если раскомментировать
+            #reward += self.back_value + self.lay_value - self.commission_perc
             self.have_position = False
             self.open_price = 0.0
+            self.bet_type = Actions.Close
+            print(reward)
+        else:
+          close = 0.0
+          prev_close = 0.0
 
-        self._offset += 1
-        prev_close = close
-        close = self._cur_close()
-        done |= self._offset >= self._prices.close.shape[0]-1
+        self._offset += 1 
 
-        if self.have_position and not self.reward_on_close:
-            reward += 100.0 * (close - prev_close) / prev_close
+        if self.have_position:
+            if(self.bet_type == Actions.Back):
+                close = self._cur_close(Actions.Back)
+                reward += self.open_price / close - 1
+            elif(self.bet_type == Actions.Lay):
+                close = self._cur_close(Actions.Lay)
+                reward += 1 - close / self.open_price
 
+        done = True if self._prices.seconds_to_start[self._offset] <= 10 or self._offset >= self._prices.seconds_to_start.shape[0]-1 else False
+
+        if done:
+          close_type = Actions.Lay if self.back_value + self.lay_value > 0 else Actions.Back
+          close_price = self._prices.lay_price[self._offset] if close_type == Actions.Lay else self._prices.back_price[self._offset]
+          close_size = (self.back_value + self.lay_value) / close_price
+
+          if close_type == Actions.Lay:
+            self.lay_value = self.lay_value - self._prices.lay_price[self._offset] * close_size
+            reward += self.open_price - close_price
+          else:
+            self.back_value = self.back_value + self._prices.back_price[self._offset] * close_size
+            reward += close_price - self.open_price
+          
+          #reward = self.back_value + self.lay_value - self.commission_perc
+          #print("Episode reward", reward)
+        #print(reward)
         return reward, done
+
+    def _cur_close(self, bet_type):
+        if(bet_type == Actions.Back):
+          return self._prices.back_price[self._offset]      
+        return self._prices.lay_price[self._offset]
 
 
 class State1D(State):
@@ -149,11 +209,9 @@ class StocksEnv(gym.Env):
         assert isinstance(prices, dict)
         self._prices = prices
         if state_1d:
-            self._state = State1D(bars_count, commission, reset_on_close, reward_on_close=reward_on_close,
-                                  volumes=volumes)
+            self._state = State1D(bars_count, commission, reset_on_close, reward_on_close=reward_on_close)
         else:
-            self._state = State(bars_count, commission, reset_on_close, reward_on_close=reward_on_close,
-                                volumes=volumes)
+            self._state = State(bars_count, commission, reset_on_close, reward_on_close=reward_on_close)
         self.action_space = gym.spaces.Discrete(n=len(Actions))
         self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=self._state.shape, dtype=np.float32)
         self.random_ofs_on_reset = random_ofs_on_reset
@@ -165,7 +223,7 @@ class StocksEnv(gym.Env):
         prices = self._prices[self._instrument]
         bars = self._state.bars_count
         if self.random_ofs_on_reset:
-            offset = self.np_random.choice(prices.high.shape[0]-bars*10) + bars
+            offset = self.np_random.choice(prices.price.shape[0]-bars*10) + bars
         else:
             offset = bars
         self._state.reset(prices, offset)

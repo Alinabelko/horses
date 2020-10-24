@@ -30,10 +30,18 @@ def validation_run(env, net, episodes=100, device="cpu", epsilon=0.02, comission
                 action_idx = env.action_space.sample()
             action = environ.Actions(action_idx)
 
-            close_price = env._state._cur_close()
+            if(env._state.back_value != 0.0):
+                close = env._state._cur_close(environ.Actions.Back)
+            else:
+                close = env._state._cur_close(environ.Actions.Lay)
 
-            if action == environ.Actions.Buy and position is None:
-                position = close_price
+            close_price = close
+
+            if action == environ.Actions.Lay and position is None:
+                position = env._state._cur_close(environ.Actions.Lay)
+                position_steps = 0
+            if action == environ.Actions.Back and position is None:
+                position = env._state._cur_close(environ.Actions.Back)
                 position_steps = 0
             elif action == environ.Actions.Close and position is not None:
                 profit = close_price - position - (close_price + position) * comission / 100
