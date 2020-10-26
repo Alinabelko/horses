@@ -46,8 +46,8 @@ class State:
 
     @property
     def shape(self):
-        # [h, l, c] * bars + lay_value + back_value + have_position + rel_profit + keep
-        return (8*self.bars_count + 1 + 1 + 1 + 1 + 1, )
+        # [prices] * bars + lay_value + back_value + have_position + rel_profit + keep
+        return (9*self.bars_count + 1 + 1 + 1 + 1 + 1, )
 
     def encode(self):
         """
@@ -59,6 +59,8 @@ class State:
             res[shift] = self._prices.seconds_to_start[self._offset + bar_idx]
             shift += 1
             res[shift] = self._prices.bet_type[self._offset + bar_idx]
+            shift += 1
+            res[shift] = self._prices.selection_id[self._offset + bar_idx]
             shift += 1
             res[shift] = self._prices.price[self._offset + bar_idx]
             shift += 1
@@ -135,11 +137,19 @@ class State:
             if self.bet_type == Actions.Lay:
               self.lay_value = self.lay_value - self._prices.lay_price[self._offset] * close_size
               reward += 1 - self.open_price / close_price
-              print("reward:", round(reward*100, 3),"bet: Lay", "open_price", self.open_price, "close_price", close_price, "keep", self.keep_duration  )
+              print("reward:", round(reward*100, 3),"bet: Lay", "open_price", 
+                  self.open_price, "close_price", close_price, "selection_id", 
+                  self._prices.selection_id[self._offset].decode(),
+                  "seconds_to_start", self._prices.seconds_to_start[self._offset],
+                  "keep", self.keep_duration  )
             else:
               self.back_value = self.back_value + self._prices.back_price[self._offset] * close_size
               reward += self.open_price / close_price - 1
-              print("reward:", round(reward*100, 3),"bet: Back", "open_price", self.open_price, "close_price", close_price, "keep", self.keep_duration  )
+              print("reward:", round(reward*100, 3),"bet: Back", "open_price",
+                  self.open_price, "close_price", close_price, "selection_id", 
+                  self._prices.selection_id[self._offset].decode(),
+                  "seconds_to_start", self._prices.seconds_to_start[self._offset],
+                  "keep", self.keep_duration  )
             self.have_position = False
             self.open_price = 0.0
             self.keep_duration = 0
