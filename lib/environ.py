@@ -7,11 +7,11 @@ import collections
 
 from . import data
 
-DEFAULT_BARS_COUNT = 10
+DEFAULT_BARS_COUNT = 100
 
 MINIMAL_BET = 4.0
 
-KEEP_REWARD = 0.01
+KEEP_REWARD = 0.05
 OPEN_BET_PENALTY = 0.1
 
 
@@ -116,7 +116,7 @@ class State:
             close = self._cur_close(Actions.Lay)
             self.have_position = True
             self.open_price = close
-            self.lay_value = -1 * (self.lay_value + self._prices.lay_price[self._offset] * MINIMAL_BET)
+            self.lay_value = self.lay_value - self._prices.lay_price[self._offset] * MINIMAL_BET
             reward -= self.open_bet_penalty
 
         if self.have_position and action == Actions.Skip:
