@@ -43,11 +43,12 @@ class State:
         self._prices = prices
         self._offset = offset
         self.keep_duration = 0
+        self.open_second = 0
 
     @property
     def shape(self):
-        # [prices] * bars + lay_value + back_value + have_position + rel_profit + keep
-        return (9*self.bars_count + 1 + 1 + 1 + 1 + 1, )
+        # [prices] * bars + have_position + rel_profit
+        return (15*self.bars_count + 1 + 1, )
 
     def encode(self):
         """
@@ -60,24 +61,32 @@ class State:
             shift += 1
             res[shift] = self._prices.bet_type[self._offset + bar_idx]
             shift += 1
-            res[shift] = self._prices.selection_id[self._offset + bar_idx]
-            shift += 1
-            res[shift] = self._prices.price[self._offset + bar_idx]
+            res[shift] = self._prices.avg_price[self._offset + bar_idx]
             shift += 1
             res[shift] = self._prices.price_size[self._offset + bar_idx]
             shift += 1
-            res[shift] = self._prices.stack_sum_back[self._offset + bar_idx]
+            res[shift] = self._prices.ind1[self._offset + bar_idx]
             shift += 1
-            res[shift] = self._prices.stack_sum_lay[self._offset + bar_idx]
+            res[shift] = self._prices.ind2[self._offset + bar_idx]
             shift += 1
-            res[shift] = self._prices.back_price[self._offset + bar_idx]
+            res[shift] = self._prices.ind3[self._offset + bar_idx]
             shift += 1
-            res[shift] = self._prices.lay_price[self._offset + bar_idx]
+            res[shift] = self._prices.ind4[self._offset + bar_idx]
             shift += 1
-        res[shift] = self.lay_value
-        shift += 1
-        res[shift] = self.back_value
-        shift += 1
+            res[shift] = self._prices.ind5[self._offset + bar_idx]
+            shift += 1
+            res[shift] = self._prices.ind6[self._offset + bar_idx]
+            shift += 1
+            res[shift] = self._prices.ind7[self._offset + bar_idx]
+            shift += 1
+            res[shift] = self._prices.ind8[self._offset + bar_idx]
+            shift += 1
+            res[shift] = self._prices.ind9[self._offset + bar_idx]
+            shift += 1
+            res[shift] = self._prices.stack_back_proportion[self._offset + bar_idx]
+            shift += 1
+            res[shift] = self._prices.stack_lay_proportion[self._offset + bar_idx]
+            shift += 1
         res[shift] = float(self.have_position)
         shift += 1
         if not self.have_position:
@@ -88,9 +97,7 @@ class State:
                 res[shift] = self.open_price / close - 1
             else:
                 close = self._cur_close(Actions.Lay)
-                res[shift] = 1 - close / self.open_price
-        shift += 1
-        res[shift] = self.keep_duration
+                res[shift] = 1 - self.open_price /  close
         return res
 
 
@@ -106,28 +113,28 @@ class State:
 
         if action == Actions.Back and not self.have_position:
             self.bet_type = Actions.Back
-            close = self._cur_close(self.bet_type)
             self.have_position = True
-            self.open_price = close
+            self.open_second = self._prices.seconds_to_start[self._offset]
+            self.open_price = self._prices.back_price[self._offset]
             self.back_value = self.back_value + self._prices.back_price[self._offset] * MINIMAL_BET
             reward -= self.open_bet_penalty
         if action == Actions.Lay and not self.have_position:
             self.bet_type = Actions.Lay
-            close = self._cur_close(Actions.Lay)
             self.have_position = True
-            self.open_price = close
+            self.open_second = self._prices.seconds_to_start[self._offset]
+            self.open_price = self._prices.lay_price[self._offset]
             self.lay_value = self.lay_value - self._prices.lay_price[self._offset] * MINIMAL_BET
             reward -= self.open_bet_penalty
 
         if self.have_position and action == Actions.Skip:
             reward = KEEP_REWARD
             self.keep_duration += 1
-            if(self.bet_type == Actions.Back):
-                close = self._cur_close(Actions.Back)
-                reward += self.open_price / close - 1
-            elif(self.bet_type == Actions.Lay):
-                close = self._cur_close(Actions.Lay)
-                reward += 1 - self.open_price / close
+            #if(self.bet_type == Actions.Back):
+            #    close = self._cur_close(Actions.Back)
+            #    reward += self.open_price / close - 1
+            #elif(self.bet_type == Actions.Lay):
+            #    close = self._cur_close(Actions.Lay)
+            #    reward += 1 - self.open_price / close
 
         elif action == Actions.Close and self.have_position:
             close_type = Actions.Lay if (self.back_value + self.lay_value) > 0 else Actions.Back
@@ -141,7 +148,10 @@ class State:
                   self.open_price, "close_price", close_price, "selection_id", 
                   self._prices.selection_id[self._offset].decode(),
                   "seconds_to_start", self._prices.seconds_to_start[self._offset],
-                  "keep", self.keep_duration  )
+                  "offset", self._offset,
+                  "keep", self.keep_duration,
+                  "open_second", self.open_second,
+                  "seconds_length", self.open_second - self._prices.seconds_to_start[self._offset] )
             else:
               self.back_value = self.back_value + self._prices.back_price[self._offset] * close_size
               reward += self.open_price / close_price - 1
@@ -149,13 +159,15 @@ class State:
                   self.open_price, "close_price", close_price, "selection_id", 
                   self._prices.selection_id[self._offset].decode(),
                   "seconds_to_start", self._prices.seconds_to_start[self._offset],
-                  "keep", self.keep_duration  )
+                  "offset", self._offset,
+                  "keep", self.keep_duration,
+                  "open_second", self.open_second,
+                  "seconds_length", self.open_second - self._prices.seconds_to_start[self._offset] )
             self.have_position = False
             self.open_price = 0.0
             self.keep_duration = 0
+            self.open_second = 0
             self.bet_type = Actions.Close
-            #self.back_value = 0.0
-            #self.lay_value = 0.0
 
         self._offset += 1 
 
@@ -230,11 +242,14 @@ class StocksEnv(gym.Env):
 
     def reset(self):
         # make selection of the instrument and it's offset. Then reset the state
+        print(list(self._prices.keys()))
         self._instrument = self.np_random.choice(list(self._prices.keys()))
         prices = self._prices[self._instrument]
         bars = self._state.bars_count
         if self.random_ofs_on_reset:
-            offset = self.np_random.choice(prices.price.shape[0]-bars*10) + bars
+            offset = bars           
+            while(prices.seconds_to_start[offset] > 600 or prices.seconds_to_start[offset] < 100):
+              offset = self.np_random.choice(prices.avg_price.shape[0]-bars) + bars
         else:
             offset = bars
         self._state.reset(prices, offset)
