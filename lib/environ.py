@@ -12,7 +12,7 @@ DEFAULT_BARS_COUNT = 100
 MINIMAL_BET = 4.0
 #KEEP_REWARD = 0.05
 OPEN_BET_PENALTY = 0.1
-CLOSE_BET_PENALTY = 0.1
+#CLOSE_BET_PENALTY = 0.1
 
 
 class Actions(enum.Enum):
@@ -161,7 +161,7 @@ class State:
                   "open_second", self.open_second,
                   "seconds_length", self.open_second - self._prices.seconds_to_start[self._offset]
                    )
-            reward -= CLOSE_BET_PENALTY
+            #reward -= CLOSE_BET_PENALTY
             self.have_position = False
             self.open_price = 0.0
             self.keep_duration = 0
