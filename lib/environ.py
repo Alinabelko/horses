@@ -10,9 +10,9 @@ from . import data
 DEFAULT_BARS_COUNT = 100
 
 MINIMAL_BET = 4.0
-
 #KEEP_REWARD = 0.05
 OPEN_BET_PENALTY = 0.1
+CLOSE_BET_PENALTY = 0.1
 
 
 class Actions(enum.Enum):
@@ -117,7 +117,7 @@ class State:
             self.have_position = True
             self.open_second = self._prices.seconds_to_start[self._offset]
             self.open_price = self._prices.back_price[self._offset]
-            self.back_value = self.back_value + self._prices.back_price[self._offset] * MINIMAL_BET
+            self.back_value += self._prices.back_price[self._offset] * MINIMAL_BET
             reward -= self.open_bet_penalty
             self.previous_profit = 0
         if action == Actions.Lay and not self.have_position:
@@ -147,7 +147,9 @@ class State:
                   "seconds_length", self.open_second - self._prices.seconds_to_start[self._offset] 
                   )
             else:
-              self.back_value = self.back_value + self._prices.back_price[self._offset] * close_size
+              #смена знака для размера закрывающей ставки
+              close_size = - close_size
+              self.back_value =+ self._prices.back_price[self._offset] * close_size
               reward = self.open_price / close_price - 1
               print("reward:", round(reward*100, 3),"bet: Back", "open_price",
                   self.open_price, "close_price", close_price, 
@@ -159,6 +161,7 @@ class State:
                   "open_second", self.open_second,
                   "seconds_length", self.open_second - self._prices.seconds_to_start[self._offset]
                    )
+            reward -= CLOSE_BET_PENALTY
             self.have_position = False
             self.open_price = 0.0
             self.keep_duration = 0
@@ -169,10 +172,10 @@ class State:
         if self.have_position:
           profit = 0
           if(self.bet_type == Actions.Back):
-              close = self._cur_close(Actions.Back)
+              close = self._cur_close(Actions.Lay)
               profit = self.open_price / close - 1
           elif(self.bet_type == Actions.Lay):
-              close = self._cur_close(Actions.Lay)
+              close = self._cur_close(Actions.Back)
               profit = 1 - self.open_price / close
           reward = profit - self.previous_profit
           #print("reward", reward)
@@ -184,36 +187,39 @@ class State:
         done = True if self._prices.seconds_to_start[self._offset] <= 10 or self._offset >= self._prices.seconds_to_start.shape[0]-1 else False
 
         if done:
-          close_type = Actions.Lay if self.back_value + self.lay_value > 0 else Actions.Back
-          close_price = self._prices.lay_price[self._offset] if close_type == Actions.Lay else self._prices.back_price[self._offset]
-          close_size = (self.back_value + self.lay_value) / close_price
+          if(self.have_position):
+            close_type = Actions.Lay if self.back_value + self.lay_value > 0 else Actions.Back
+            close_price = self._prices.lay_price[self._offset] if close_type == Actions.Lay else self._prices.back_price[self._offset]
+            close_size = (self.back_value + self.lay_value) / close_price
 
-          if self.bet_type == Actions.Lay:
+            if close_type == Actions.Lay:
               self.lay_value = self.lay_value - self._prices.lay_price[self._offset] * close_size
               reward = 1 - self.open_price / close_price
               print("reward:", round(reward*100, 3),"bet: Lay", "open_price", 
                   self.open_price, "close_price", close_price, 
-                  #"selection_id", 
-                  #self._prices.selection_id[self._offset].decode(),
-                  #"seconds_to_start", self._prices.seconds_to_start[self._offset],
-                  #"offset", self._offset,
+                  "selection_id", 
+                  self._prices.selection_id[self._offset].decode(),
+                  "seconds_to_start", self._prices.seconds_to_start[self._offset],
+                  "offset", self._offset,
                   "keep", self.keep_duration,
-                  #"open_second", self.open_second,
-                  #"seconds_length", self.open_second - self._prices.seconds_to_start[self._offset] 
+                  "open_second", self.open_second,
+                  "seconds_length", self.open_second - self._prices.seconds_to_start[self._offset] 
                   )
-          else:
-              self.back_value = self.back_value + self._prices.back_price[self._offset] * close_size
+            else:
+              #смена знака для размера закрывающей ставки
+              close_size = - close_size
+              self.back_value =+ self._prices.back_price[self._offset] * close_size
               reward = self.open_price / close_price - 1
               print("reward:", round(reward*100, 3),"bet: Back", "open_price",
                   self.open_price, "close_price", close_price, 
-                  #"selection_id", 
-                  #self._prices.selection_id[self._offset].decode(),
-                  #"seconds_to_start", self._prices.seconds_to_start[self._offset],
-                  #"offset", self._offset,
+                  "selection_id", 
+                  self._prices.selection_id[self._offset].decode(),
+                  "seconds_to_start", self._prices.seconds_to_start[self._offset],
+                  "offset", self._offset,
                   "keep", self.keep_duration,
-                  #"open_second", self.open_second,
-                  #"seconds_length", self.open_second - self._prices.seconds_to_start[self._offset] 
-                  )          
+                  "open_second", self.open_second,
+                  "seconds_length", self.open_second - self._prices.seconds_to_start[self._offset]
+                   )
           self.back_value = 0.0
           self.lay_value = 0.0
         
