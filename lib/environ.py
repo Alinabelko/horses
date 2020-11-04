@@ -298,7 +298,7 @@ class StocksEnv(gym.Env):
         prices = self._prices[self._instrument]
         bars = self._state.bars_count
         if self.random_ofs_on_reset:
-            #\offset = bars           
+            offset = bars           
             while(prices.seconds_to_start[offset] > 600 or prices.seconds_to_start[offset] < 100):
               offset = self.np_random.choice(prices.avg_price.shape[0]-bars) + bars
         else:
