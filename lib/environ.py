@@ -145,10 +145,10 @@ class State:
                 reward -= ZERO_BET_PENALTY
               print("reward:", round(reward*100, 3),"bet: Back", "open_price", 
                   self.open_price, "close_price", close_price, 
-                  #"selection_id", 
-                  #self._prices.selection_id[self._offset].decode(),
-                  #"seconds_to_start", self._prices.seconds_to_start[self._offset],
-                  #"offset", self._offset,
+                  "selection_id", 
+                  self._prices.selection_id[self._offset].decode(),
+                  "seconds_to_start", self._prices.seconds_to_start[self._offset],
+                  "offset", self._offset,
                   "keep", self.keep_duration,
                   "open_second", self.open_second,
                   "seconds_length", self.open_second - self._prices.seconds_to_start[self._offset] 
@@ -160,10 +160,10 @@ class State:
               reward = 1 - self.open_price / close_price      
               print("reward:", round(reward*100, 3),"bet: Lay", "open_price",
                   self.open_price, "close_price", close_price, 
-                  #"selection_id", 
-                  #self._prices.selection_id[self._offset].decode(),
-                  #"seconds_to_start", self._prices.seconds_to_start[self._offset],
-                  #"offset", self._offset,
+                  "selection_id", 
+                  self._prices.selection_id[self._offset].decode(),
+                  "seconds_to_start", self._prices.seconds_to_start[self._offset],
+                  "offset", self._offset,
                   "keep", self.keep_duration,
                   "open_second", self.open_second,
                   "seconds_length", self.open_second - self._prices.seconds_to_start[self._offset]
@@ -234,7 +234,8 @@ class State:
                   "open_second", self.open_second,
                   "seconds_length", self.open_second - self._prices.seconds_to_start[self._offset]
                    )
-            reward -= CLOSE_BET_PENALTY
+              reward -= CLOSE_BET_PENALTY
+          self.have_position = False
           self.back_value = 0.0
           self.lay_value = 0.0
         
@@ -278,7 +279,7 @@ class StocksEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
     def __init__(self, prices, bars_count=DEFAULT_BARS_COUNT,
-                 commission=OPEN_BET_PENALTY, reset_on_close=True, state_1d=False,
+                 commission=OPEN_BET_PENALTY, reset_on_close=False, state_1d=False,
                  random_ofs_on_reset=True, reward_on_close=False, volumes=False):
         assert isinstance(prices, dict)
         self._prices = prices
