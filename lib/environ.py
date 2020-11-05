@@ -10,10 +10,10 @@ from . import data
 DEFAULT_BARS_COUNT = 100
 
 MINIMAL_BET = 4.0
-KEEP_REWARD = 0.05
-OPEN_BET_PENALTY = 0.01
-CLOSE_BET_PENALTY = 0.01
-ZERO_BET_PENALTY = 0.1
+KEEP_REWARD = 0.00
+OPEN_BET_PENALTY = 0.00
+CLOSE_BET_PENALTY = 0.00
+ZERO_BET_PENALTY = 0.0
 
 
 class Actions(enum.Enum):
@@ -140,10 +140,10 @@ class State:
             close_size = (self.back_value + self.lay_value) / close_price
             if close_type == Actions.Lay:
               self.lay_value = self.lay_value - self._prices.lay_price[self._offset] * close_size
-              reward = 1 - self.open_price / close_price
+              reward = self.open_price / close_price - 1           
               if(reward == 0):
                 reward -= ZERO_BET_PENALTY
-              print("reward:", round(reward*100, 3),"bet: Lay", "open_price", 
+              print("reward:", round(reward*100, 3),"bet: Back", "open_price", 
                   self.open_price, "close_price", close_price, 
                   #"selection_id", 
                   #self._prices.selection_id[self._offset].decode(),
@@ -157,10 +157,8 @@ class State:
               #смена знака для размера закрывающей ставки
               close_size = - close_size
               self.back_value += self._prices.back_price[self._offset] * close_size
-              reward = self.open_price / close_price - 1
-              if(reward == 0):
-                reward -= ZERO_BET_PENALTY
-              print("reward:", round(reward*100, 3),"bet: Back", "open_price",
+              reward = 1 - self.open_price / close_price      
+              print("reward:", round(reward*100, 3),"bet: Lay", "open_price",
                   self.open_price, "close_price", close_price, 
                   #"selection_id", 
                   #self._prices.selection_id[self._offset].decode(),
@@ -170,8 +168,9 @@ class State:
                   "open_second", self.open_second,
                   "seconds_length", self.open_second - self._prices.seconds_to_start[self._offset]
                    )
-              #reward -= CLOSE_BET_PENALTY
-            #reward -= CLOSE_BET_PENALTY
+              if(reward == 0):
+                reward -= ZERO_BET_PENALTY
+            reward -= CLOSE_BET_PENALTY
             self.have_position = False
             self.open_price = 0.0
             self.keep_duration = 0
@@ -187,7 +186,7 @@ class State:
           elif(self.bet_type == Actions.Lay):
               close = self._cur_close(Actions.Back)
               profit = 1 - self.open_price / close
-          reward = profit - self.previous_profit
+          reward += profit - self.previous_profit
           #print("reward", reward)
           reward += KEEP_REWARD
           self.keep_duration += 1
@@ -205,10 +204,10 @@ class State:
 
             if close_type == Actions.Lay:
               self.lay_value = self.lay_value - self._prices.lay_price[self._offset] * close_size
-              reward = 1 - self.open_price / close_price
+              reward = self.open_price / close_price - 1
               if(reward == 0):
                 reward -= ZERO_BET_PENALTY
-              print("reward:", round(reward*100, 3),"bet: Lay", "open_price", 
+              print("reward:", round(reward*100, 3),"bet: Back", "open_price", 
                   self.open_price, "close_price", close_price, 
                   "selection_id", 
                   self._prices.selection_id[self._offset].decode(),
@@ -222,10 +221,10 @@ class State:
               #смена знака для размера закрывающей ставки
               close_size = - close_size
               self.back_value += self._prices.back_price[self._offset] * close_size
-              reward = self.open_price / close_price - 1
+              reward = 1 - self.open_price / close_price             
               if(reward == 0):
                 reward -= ZERO_BET_PENALTY
-              print("reward:", round(reward*100, 3),"bet: Back", "open_price",
+              print("reward:", round(reward*100, 3),"bet: Lay", "open_price",
                   self.open_price, "close_price", close_price, 
                   "selection_id", 
                   self._prices.selection_id[self._offset].decode(),
