@@ -209,7 +209,10 @@ class State:
       if(not self.is_validation):
         print("rew:", round(reward*100, 3),
                   self.bet_type,
-                  self.open_price, "-", close_price,                   
+                  self.open_price, "-", close_price,
+                  "seconds", 
+                  self.open_second, "-", 
+                  self._prices.seconds_to_start[self._offset],                    
                   "offset", self._offset,
                   "keep", self.keep_duration,
                   "selection_id", 
@@ -218,7 +221,10 @@ class State:
       else:
         print("val:", round(reward*100, 3),
                   self.bet_type,
-                  self.open_price, "-", close_price,                   
+                  self.open_price, "-", close_price,  
+                  "seconds", 
+                  self.open_second, "-", 
+                  self._prices.seconds_to_start[self._offset]      ,    
                   "offset", self._offset,
                   "keep", self.keep_duration,
                   "selection_id", 
