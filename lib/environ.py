@@ -300,9 +300,11 @@ class StocksEnv(gym.Env):
             while(prices.seconds_to_start[offset] > 600 or prices.seconds_to_start[offset] < 100):
               offset = self.np_random.choice(prices.avg_price.shape[0]-bars) + bars
         else:
-            offset = bars
+            offset_start = np.argmax(prices.seconds_to_start <= 600)
+            offset = offset_start
         self._state.reset(prices, offset)
         return self._state.encode()
+
 
     def step(self, action_idx):
         action = Actions(action_idx)
